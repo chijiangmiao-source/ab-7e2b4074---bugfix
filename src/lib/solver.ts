@@ -160,31 +160,20 @@ export function solve(initial: Token[]): AuditResult {
       layers.push(nextLayer);
     }
     // layers[d] 中状态到目标的距离为 d，其最短后继位于 layers[d-1]。
+    // 不同状态可以在同一深度使用相同区间（路径会在中间排列汇合），
+    // 因此这里逐状态独立汇总，绝不能跨状态按区间去重。
     for (let d = 1; d <= distance; d += 1) {
-      const intervalOwners = n >= 5 ? new Set<string>() : null;
       for (const code of layers[d]) {
-        const candidates: { code: number; key: string }[] = [];
-        eachNeighbor(code, n, (nextCode, start, end) => {
-          if (distR.get(nextCode) !== d - 1) return;
-          candidates.push({ code: nextCode, key: inversionKey(start, end) });
-        });
-
-        const retained: { code: number; key: string }[] = [];
-        for (const candidate of candidates) {
-          if (intervalOwners?.has(candidate.key)) continue;
-          intervalOwners?.add(candidate.key);
-          retained.push(candidate);
-        }
-        if (retained.length === 0 && candidates.length > 0) {
-          retained.push(candidates[0]);
-        }
-
         let ways = 0n;
         const nextCodes = new Set<number>();
-        for (const candidate of retained) {
-          ways += waysToGoal.get(candidate.code)!;
-          nextCodes.add(candidate.code);
-        }
+        eachNeighbor(code, n, (nextCode) => {
+          if (distR.get(nextCode) !== d - 1) return;
+          // 同一状态经不同区间不会到达同一后继（倒位是互不相同的变换），
+          // 集合仅作稳健去重，保证每条最短后继边恰好计入一次。
+          if (nextCodes.has(nextCode)) return;
+          nextCodes.add(nextCode);
+          ways += waysToGoal.get(nextCode)!;
+        });
         waysToGoal.set(code, ways);
         suffixEdges.set(code, nextCodes);
       }

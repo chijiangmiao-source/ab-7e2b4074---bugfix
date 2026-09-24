@@ -191,6 +191,81 @@ describe('与暴力枚举交叉验证（n=3 全部排列，n=4 部分排列）',
   }
 });
 
+describe('五标记场景 [-1,-2,-3,-4,-5]（路径在中间排列汇合）', () => {
+  const values = [-1, -2, -3, -4, -5];
+  const nIntervals = (5 * 6) / 2;
+
+  it('步数 5、精确总数 140、规范步骤为逐位置单点倒位', () => {
+    const r = solve(tokensOf(values));
+    expect(r.distance).toBe(5);
+    expect(r.totalPaths).toBe(140n);
+    expect(r.canonical.steps).toEqual([
+      { start: 1, end: 1 },
+      { start: 2, end: 2 },
+      { start: 3, end: 3 },
+      { start: 4, end: 4 },
+      { start: 5, end: 5 },
+    ]);
+    // 规范轨迹必须可行且终于全正顺序
+    let cur = tokensOf(values);
+    for (const s of r.canonical.steps) {
+      cur = applyInversion(cur, s.start - 1, s.end - 1);
+    }
+    expect(signedOf(cur)).toEqual([1, 2, 3, 4, 5]);
+  });
+
+  it('每行（深度）区间计数之和恰为 140，且矩阵共 5 行 15 个区间', () => {
+    const r = solve(tokensOf(values));
+    expect(r.matrix).toHaveLength(5);
+    for (const layer of r.matrix) {
+      expect(layer.intervals).toHaveLength(nIntervals);
+      let sum = 0n;
+      for (const cell of layer.intervals) sum += cell.pathCount;
+      expect(sum).toBe(140n);
+    }
+  });
+
+  it('据精确计数标注全部/部分/未出现，且与计数严格一致', () => {
+    const r = solve(tokensOf(values));
+    for (const layer of r.matrix) {
+      for (const cell of layer.intervals) {
+        if (cell.pathCount === 140n) expect(cell.presence).toBe('all');
+        else if (cell.pathCount === 0n) expect(cell.presence).toBe('none');
+        else {
+          expect(cell.pathCount > 0n).toBe(true);
+          expect(cell.presence).toBe('some');
+        }
+      }
+      // 该场景没有任何区间被全部 140 条方案共用，
+      // 每行都应有未出现区间与部分出现区间。
+      expect(layer.intervals.some((c) => c.presence === 'none')).toBe(true);
+      expect(layer.intervals.some((c) => c.presence === 'some')).toBe(true);
+      expect(layer.intervals.every((c) => c.presence !== 'all')).toBe(true);
+    }
+  });
+
+  it('逐格计数与独立暴力枚举完全一致', () => {
+    const r = solve(tokensOf(values));
+    const b = bruteForce(values);
+    expect(b.distance).toBe(5);
+    expect(b.total).toBe(140);
+    expect(r.canonical.steps).toEqual(b.lexicographicMin);
+  });
+
+  it('规范轨迹高亮不与矩阵结论矛盾：规范格必须实际出现（非 none）', () => {
+    const r = solve(tokensOf(values));
+    for (const layer of r.matrix) {
+      const canon = r.canonical.steps[layer.depth];
+      const cell = layer.intervals.find(
+        (c) => c.start === canon.start && c.end === canon.end,
+      )!;
+      expect(cell).toBeDefined();
+      expect(cell.pathCount > 0n).toBe(true);
+      expect(cell.presence).not.toBe('none');
+    }
+  });
+});
+
 describe('深度×区间矩阵', () => {
   it('未使用区间标 none，全部方案共用标 all，并给出精确出现数', () => {
     // [-1,2,3] 只有一条最短路径：单点翻转位置 1
