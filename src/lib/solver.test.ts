@@ -191,6 +191,90 @@ describe('与暴力枚举交叉验证（n=3 全部排列，n=4 部分排列）',
   }
 });
 
+describe('五负号标记 [-1,-2,-3,-4,-5]：大量同长路径在中间排列汇合', () => {
+  const input = [-1, -2, -3, -4, -5];
+
+  it('最少步数为 5，精确最短方案总数为 140，规范轨迹为五个单点倒位', () => {
+    const r = solve(tokensOf(input));
+    expect(r.distance).toBe(5);
+    expect(r.totalPaths).toBe(140n);
+    expect(r.canonical.steps).toEqual([
+      { start: 1, end: 1 },
+      { start: 2, end: 2 },
+      { start: 3, end: 3 },
+      { start: 4, end: 4 },
+      { start: 5, end: 5 },
+    ]);
+    // 规范轨迹逐步执行后必须到达全正顺序
+    let cur = tokensOf(input);
+    for (const s of r.canonical.steps) {
+      cur = applyInversion(cur, s.start - 1, s.end - 1);
+    }
+    expect(signedOf(cur)).toEqual([1, 2, 3, 4, 5]);
+  });
+
+  it('与独立暴力枚举在距离 / 总数 / 规范字典序上完全一致', () => {
+    const r = solve(tokensOf(input));
+    const b = bruteForce(input);
+    expect(b.distance).toBe(5);
+    expect(BigInt(b.total)).toBe(140n);
+    expect(r.distance).toBe(b.distance);
+    expect(r.totalPaths).toBe(BigInt(b.total));
+    expect(r.canonical.steps).toEqual(b.lexicographicMin);
+  });
+
+  it('深度×区间矩阵：共 5 层，每层计数之和恰为 140', () => {
+    const r = solve(tokensOf(input));
+    expect(r.matrix).toHaveLength(5);
+    for (const layer of r.matrix) {
+      let sum = 0n;
+      for (const cell of layer.intervals) sum += cell.pathCount;
+      expect(sum).toBe(140n);
+    }
+  });
+
+  it('每个区间的精确计数与全部/部分/未出现标注正确', () => {
+    const r = solve(tokensOf(input));
+    // 独立暴力计算给出的每层精确计数（五个深度同构、计数一致）
+    const expected = new Map<string, bigint>([
+      ['1:1', 26n],
+      ['1:3', 4n],
+      ['2:2', 24n],
+      ['2:4', 8n],
+      ['3:3', 24n],
+      ['3:5', 4n],
+      ['4:4', 24n],
+      ['5:5', 26n],
+    ]);
+    expect(r.matrix).toHaveLength(5);
+    for (const layer of r.matrix) {
+      expect(layer.intervals).toHaveLength((5 * 6) / 2);
+      for (const cell of layer.intervals) {
+        const key = `${cell.start}:${cell.end}`;
+        const want = expected.get(key) ?? 0n;
+        expect(cell.pathCount).toBe(want);
+        const wantPresence =
+          want === 140n ? 'all' : want === 0n ? 'none' : 'some';
+        expect(cell.presence).toBe(wantPresence);
+      }
+    }
+  });
+
+  it('规范轨迹在每个深度命中的格子计数严格为正，高亮不与汇总结论矛盾', () => {
+    const r = solve(tokensOf(input));
+    for (let d = 0; d < r.distance; d += 1) {
+      const step = r.canonical.steps[d];
+      const cell = r.matrix[d].intervals.find(
+        (c) => c.start === step.start && c.end === step.end,
+      )!;
+      expect(cell).toBeDefined();
+      expect(cell.pathCount > 0n).toBe(true);
+      // 规范方案只是 140 条之一，因此其每步选择都应标注为“部分”而非“全部”
+      expect(cell.presence).toBe('some');
+    }
+  });
+});
+
 describe('深度×区间矩阵', () => {
   it('未使用区间标 none，全部方案共用标 all，并给出精确出现数', () => {
     // [-1,2,3] 只有一条最短路径：单点翻转位置 1

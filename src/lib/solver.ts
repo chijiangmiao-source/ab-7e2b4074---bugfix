@@ -160,31 +160,21 @@ export function solve(initial: Token[]): AuditResult {
       layers.push(nextLayer);
     }
     // layers[d] 中状态到目标的距离为 d，其最短后继位于 layers[d-1]。
+    // 每个状态到目标的最短方案数 = 全部最短出边所向后继方案数之和。
+    // 注意：同一深度的不同状态完全可能选择相同区间——这些是在中间排列
+    // 汇合的彼此独立的方案，绝不能跨状态按区间去重（曾有 n>=5 时启用的
+    // intervalOwners 去重，导致总数被低估、矩阵行和不守恒）。
     for (let d = 1; d <= distance; d += 1) {
-      const intervalOwners = n >= 5 ? new Set<string>() : null;
       for (const code of layers[d]) {
-        const candidates: { code: number; key: string }[] = [];
-        eachNeighbor(code, n, (nextCode, start, end) => {
-          if (distR.get(nextCode) !== d - 1) return;
-          candidates.push({ code: nextCode, key: inversionKey(start, end) });
-        });
-
-        const retained: { code: number; key: string }[] = [];
-        for (const candidate of candidates) {
-          if (intervalOwners?.has(candidate.key)) continue;
-          intervalOwners?.add(candidate.key);
-          retained.push(candidate);
-        }
-        if (retained.length === 0 && candidates.length > 0) {
-          retained.push(candidates[0]);
-        }
-
         let ways = 0n;
         const nextCodes = new Set<number>();
-        for (const candidate of retained) {
-          ways += waysToGoal.get(candidate.code)!;
-          nextCodes.add(candidate.code);
-        }
+        eachNeighbor(code, n, (nextCode) => {
+          if (distR.get(nextCode) !== d - 1) return;
+          // eachNeighbor 按区间逐条回调：即便两个区间落到同一后继，
+          // 它们也是区间序列不同的两条方案，必须各自计入。
+          ways += waysToGoal.get(nextCode)!;
+          nextCodes.add(nextCode);
+        });
         waysToGoal.set(code, ways);
         suffixEdges.set(code, nextCodes);
       }
